@@ -206,6 +206,18 @@ describe('findPathMatches', () => {
       expect(m[0].text).toBe('file:///tmp/x.md');
     });
 
+    it('extends the link range over :line and :line:col but not trailing punctuation', () => {
+      const line = 'x /src/a.ts:42 y';
+      const [a] = findPathMatches(line, 'linux');
+      expect(line.slice(a.start, a.end)).toBe('/src/a.ts:42');
+      const wrapped = '(see /src/a.ts:42:10).';
+      const [b] = findPathMatches(wrapped, 'linux');
+      expect(wrapped.slice(b.start, b.end)).toBe('/src/a.ts:42:10');
+      const win = 'C:\\Temp\\t.txt:42';
+      const [c] = findPathMatches(win, 'win32');
+      expect(win.slice(c.start, c.end)).toBe(win);
+    });
+
     it('reports :line and :line:col separately from the path text', () => {
       const [a] = findPathMatches('/src/a.ts:42', 'linux');
       expect(a).toMatchObject({ text: '/src/a.ts', line: 42 });

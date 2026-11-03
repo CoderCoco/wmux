@@ -29,7 +29,11 @@ export interface PathMatch {
   text: string;
   /** Inclusive start offset within the line text (0-based). */
   start: number;
-  /** Exclusive end offset within the line text (0-based). */
+  /**
+   * Exclusive end offset within the line text (0-based). Covers a recognised
+   * `:line[:col]` suffix, so the underline/hit area includes it even though
+   * `text` does not.
+   */
   end: number;
   /** 1-based line from a `:42` / `:42:10` suffix, when the match had one. */
   line?: number;
@@ -116,12 +120,12 @@ export function findPathMatches(line: string, platform: NodeJS.Platform): PathMa
     regex.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = regex.exec(line)) !== null) {
-      const { text: cleaned, line: ln, col } = trimPunctuation(m[0]);
+      const { text: cleaned, spanLength, line: ln, col } = trimPunctuation(m[0]);
       if (cleaned.length === 0) continue;
       raw.push({
         text: cleaned,
         start: m.index,
-        end: m.index + cleaned.length,
+        end: m.index + spanLength,
         ...(ln !== undefined && { line: ln }),
         ...(col !== undefined && { col }),
       });
@@ -147,7 +151,7 @@ export function findPathMatches(line: string, platform: NodeJS.Platform): PathMa
   return dedupe(raw);
 }
 
-function trimPunctuation(text: string): { text: string; line?: number; col?: number } {
+function trimPunctuation(text: string): { text: string; spanLength: number; line?: number; col?: number } {
   // Iterate to a fixed point so wrapped suffixes ("(see /foo.ts:42)") and
   // semver-shaped trailers ("/foo.ts:1.2.3", which SOURCE_LOCATION_SUFFIX
   // peels off one segment at a time) both fully unwrap. Bounded at 8
@@ -156,6 +160,8 @@ function trimPunctuation(text: string): { text: string; line?: number; col?: num
   let prev = text;
   let line: number | undefined;
   let col: number | undefined;
+  // Length of the text up to and including a recognised `:line[:col]` tail.
+  let locationSpan: number | undefined;
   for (let i = 0; i < 8; i++) {
     let out = prev.replace(TRAILING_PUNCTUATION, '');
     // Remember the first strict ":line[:col]" tail before it is stripped.
@@ -164,6 +170,7 @@ function trimPunctuation(text: string): { text: string; line?: number; col?: num
       if (loc) {
         line = Number(loc[1]);
         col = loc[2] !== undefined ? Number(loc[2]) : undefined;
+        locationSpan = out.length;
       }
     }
     out = out.replace(SOURCE_LOCATION_SUFFIX, '');
@@ -172,6 +179,7 @@ function trimPunctuation(text: string): { text: string; line?: number; col?: num
   }
   return {
     text: prev,
+    spanLength: locationSpan ?? prev.length,
     ...(line !== undefined && { line }),
     ...(col !== undefined && { col }),
   };
