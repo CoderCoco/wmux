@@ -1690,6 +1690,9 @@ export const createWorkspaceSlice: StateCreator<StoreState, [['zustand/immer', n
         state.paneNewTerminalButton = data.paneNewTerminalButton;
       }
       // Experimental memory opt-ins: only an explicit true turns them on.
+      if (data.terminalOpenFileLinksIn === 'os' || data.terminalOpenFileLinksIn === 'wmux') {
+        state.terminalOpenFileLinksIn = data.terminalOpenFileLinksIn;
+      }
       if (data.terminalCompactScrollback === true) state.terminalCompactScrollback = true;
       if (data.terminalSharedWebgl === true) state.terminalSharedWebgl = true;
       if (data.splitInheritsCwd != null) state.splitInheritsCwd = data.splitInheritsCwd;

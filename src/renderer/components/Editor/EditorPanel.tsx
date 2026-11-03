@@ -6,6 +6,8 @@ interface EditorPanelProps {
   filePath: string;
   isActive: boolean;
   surfaceId: string;
+  /** 1-based line to scroll to (a terminal `path:line` link). */
+  line?: number;
 }
 
 async function readFileContent(filePath: string): Promise<string | null> {
@@ -31,7 +33,7 @@ function shortenPath(p: string): string {
   return '...' + sep + parts.slice(-2).join(sep);
 }
 
-export default function EditorPanel({ filePath, isActive, surfaceId }: EditorPanelProps) {
+export default function EditorPanel({ filePath, isActive, surfaceId, line }: EditorPanelProps) {
   const t = useT();
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +51,7 @@ export default function EditorPanel({ filePath, isActive, surfaceId }: EditorPan
       : null),
     [isMarkdown, content],
   );
+  const bodyRef = useRef<HTMLDivElement>(null);
   const fileName = filePath.split(/[/\\]/).pop() || filePath;
 
   // Load file content
@@ -66,6 +69,18 @@ export default function EditorPanel({ filePath, isActive, surfaceId }: EditorPan
       setLoading(false);
     });
   }, [filePath]);
+
+  // Scroll the raw-text view to the requested line once the content is in.
+  // The markdown view has no line-to-block map, so it stays at the top.
+  useEffect(() => {
+    if (line === undefined || loading || error || editing || markdownView || content === null) return;
+    const body = bodyRef.current;
+    const pre = body?.querySelector('pre');
+    if (!body || !pre) return;
+    const total = content.split('\n').length;
+    const lineHeight = pre.scrollHeight / Math.max(total, 1);
+    body.scrollTop = Math.max(0, (Math.min(line, total) - 1) * lineHeight - body.clientHeight / 4);
+  }, [line, loading, error, editing, markdownView, content]);
 
   const handleToggleEdit = useCallback(() => {
     if (editing) {
@@ -180,7 +195,7 @@ export default function EditorPanel({ filePath, isActive, surfaceId }: EditorPan
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-auto">
+      <div ref={bodyRef} className="flex-1 overflow-auto">
         {loading && (
           <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-sm">
             {t('editor.loading')}

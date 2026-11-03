@@ -88,6 +88,7 @@ export const CORE_TOOL_SURFACE: readonly string[] = [
   'surface_close',
   'pane_stash',
   'pane_unstash',
+  'file_open',
   'repl_run',
   'repl_reset',
   'repl_sessions',

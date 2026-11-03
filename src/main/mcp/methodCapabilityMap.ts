@@ -197,6 +197,7 @@ export const METHOD_CAPABILITY: Record<RpcMethod, RequiredCapability> = {
   'workspace.close':   { capability: 'wmux.internal' },
   'surface.list':      { capability: 'wmux.internal' },
   'surface.new':       { capability: 'wmux.internal' },
+  'file.open':         { capability: 'wmux.internal' },
   'surface.focus':     { capability: 'wmux.internal' },
   'surface.close':     { capability: 'wmux.internal' },
 

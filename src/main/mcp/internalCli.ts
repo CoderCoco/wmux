@@ -57,6 +57,7 @@ export const WMUX_CLI_METHODS: ReadonlySet<RpcMethod> = new Set<RpcMethod>([
   // surface + pane (`wmux surface ...` / `wmux pane ...`)
   'surface.list',
   'surface.new',
+  'file.open',
   'surface.focus',
   'surface.close',
   'pane.list',

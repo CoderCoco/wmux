@@ -100,6 +100,44 @@ export function registerSurfaceRpc(
   });
 
   /**
+   * file.open — shows a file in a read-only editor/preview tab.
+   * params: { path, line?, paneId?, workspaceId?, ptyId? } — the renderer picks
+   * the pane (paneId > ptyId's pane > workspace's active pane) and resolves
+   * the path (WSL-aware) with the same code a terminal click uses.
+   */
+  router.register('file.open', (params, ctx) => {
+    const path = params['path'];
+    if (typeof path !== 'string' || path.trim().length === 0) {
+      return Promise.reject(new Error('file.open: missing required param "path"'));
+    }
+    const line = params['line'];
+    if (line !== undefined && (typeof line !== 'number' || !Number.isInteger(line) || line < 1)) {
+      return Promise.reject(new Error('file.open: "line" must be a positive integer if provided'));
+    }
+    for (const key of ['paneId', 'workspaceId', 'ptyId'] as const) {
+      const v = params[key];
+      if (v !== undefined && typeof v !== 'string') {
+        return Promise.reject(new Error(`file.open: "${key}" must be a string if provided`));
+      }
+    }
+    let workspaceId = params['workspaceId'] as string | undefined;
+    // Same commander confinement as surface.new.
+    if (ctx?.commanderWorkspace) {
+      if (workspaceId !== undefined && workspaceId !== ctx.commanderWorkspace) {
+        return Promise.reject(new Error("file.open: workspace is outside the commander's workspace"));
+      }
+      workspaceId = ctx.commanderWorkspace;
+    }
+    return sendToRenderer(getWindow, 'file.open', {
+      path,
+      ...(line !== undefined && { line }),
+      ...(workspaceId !== undefined && { workspaceId }),
+      ...(typeof params['paneId'] === 'string' && { paneId: params['paneId'] }),
+      ...(typeof params['ptyId'] === 'string' && { ptyId: params['ptyId'] }),
+    });
+  });
+
+  /**
    * surface.focus — focuses a specific surface
    * params: { id: string }
    */

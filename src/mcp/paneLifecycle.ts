@@ -100,6 +100,21 @@ const SURFACE_NEW_SHAPE = {
   cwd: z.string().optional().describe('Working directory. Omit for the workspace default.'),
 };
 
+const FILE_OPEN_SHAPE = {
+  path: z
+    .string()
+    .describe("File to show: absolute path (a /tmp path from WSL works), file:// URL, or a path relative to your pane's cwd."),
+  line: z.number().int().positive().optional().describe('1-based line to scroll to.'),
+  paneId: z
+    .string()
+    .optional()
+    .describe("Pane to open the tab in (pane_list id or #pane name). Omit for your own workspace's active pane."),
+  workspaceId: z
+    .string()
+    .optional()
+    .describe("Target workspace by id. Omit to use your own (the caller's) workspace."),
+};
+
 const SURFACE_CLOSE_SHAPE = {
   surfaceId: z.string().describe('Surface id to close (from surface_list).'),
 };
@@ -214,6 +229,25 @@ export function createPaneLifecycleToolCatalog(
       inputSchema: PANE_UNSTASH_SHAPE,
       profiles: ['full', 'core', 'commander'],
       invoke: async ({ paneId }) => callRpc('pane.unstash', { id: await paneRef(paneId) }),
+    }),
+
+    // ── file_open (CREATE family) ───────────────────────────────────
+    defineWmuxTool({
+      name: 'file_open',
+      description:
+        'Open a file in a read-only wmux editor or preview tab (markdown, text, code, images, PDF) so the user can read it. Use it to show a file you wrote, e.g. under /tmp. Paths from a WSL pane are translated for the Windows host. Fails with a clear error if the file is missing, binary, over 1 MB, or blocked by wmux.',
+      inputSchema: FILE_OPEN_SHAPE,
+      profiles: ['full', 'core'],
+      invoke: async ({ path, line, paneId, workspaceId }) => {
+        const params: Record<string, unknown> = { path };
+        if (line !== undefined) params['line'] = line;
+        if (paneId) params['paneId'] = await paneRef(paneId);
+        else {
+          const resolved = workspaceId || (await resolveCallerWorkspaceId());
+          if (resolved) params['workspaceId'] = resolved;
+        }
+        return callRpc('file.open', params);
+      },
     }),
   ]);
 }

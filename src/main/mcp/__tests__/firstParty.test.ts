@@ -155,6 +155,8 @@ describe('FIRST_PARTY_METHODS source invariant', () => {
       // issue #285 — supervisor pane/surface lifecycle (reserved wmux.internal)
       'surface.new',
       'surface.close',
+      // file_open — read-only viewer tab (reserved wmux.internal)
+      'file.open',
       // pr_verdict (the verifier bot's tool): reserved so no plugin can
       // declare it. It records one verdict for the verified caller, after main
       // re-reads the PR head and the caller's own checkout; it merges nothing

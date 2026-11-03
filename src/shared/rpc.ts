@@ -446,6 +446,7 @@ export type RpcMethod =
   | 'workspace.current'
   | 'surface.list'
   | 'surface.new'
+  | 'file.open'
   | 'surface.focus'
   | 'surface.close'
   | 'pane.list'
@@ -821,6 +822,7 @@ export const ALL_RPC_METHODS = [
   'workspace.current',
   'surface.list',
   'surface.new',
+  'file.open',
   'surface.focus',
   'surface.close',
   'pane.list',

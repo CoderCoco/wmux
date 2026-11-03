@@ -16,6 +16,7 @@ import { handleInput } from './commands/input';
 import { handleNotify } from './commands/notify';
 import { handleSystem } from './commands/system';
 import { handleBrowser, handleOpen } from './commands/browser';
+import { handleOpenFile, isFileOpenTarget } from './commands/openFile';
 import { handleGate } from './commands/gate';
 import { handleMcp } from './commands/mcp';
 import { handleSetupHooks } from './commands/setupHooks';
@@ -76,6 +77,8 @@ INPUT COMMANDS
 BROWSER PANE
   open <url> [--new] [--workspace <id>]
                                     Open/reuse a browser pane at <url> (--new: in a new tab)
+  open <path>[:line] [--line N]     Show a file in a read-only editor/preview tab
+                                    (paths, ./rel, file://; WSL paths are translated)
 
 DAEMON (headless lifecycle, no Electron/GUI required)
   daemon start                      Start the daemon if not already running
@@ -345,7 +348,9 @@ async function main(): Promise<void> {
     } else if (SYSTEM_CMDS.has(cmd)) {
       await handleSystem(cmd, rest, jsonMode);
     } else if (cmd === 'open') {
-      await handleOpen(rest, jsonMode);
+      const target = rest.find((a) => !a.startsWith('--'));
+      if (target !== undefined && isFileOpenTarget(target)) await handleOpenFile(rest, jsonMode);
+      else await handleOpen(rest, jsonMode);
     } else if (cmd === 'browser') {
       await handleBrowser(rest, jsonMode);
     } else if (cmd === 'web') {
