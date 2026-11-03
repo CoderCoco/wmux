@@ -25,6 +25,10 @@ const baseline = JSON.parse(
  *  the two drift gates from disagreeing the day a company tool comes back. */
 const EXCLUDED_PREFIXES = ['browser_', 'company_'];
 
+/** Non-browser tools deliberately kept out of core (full-profile only) because
+ *  core is a minimal surface under a byte budget. */
+const FULL_ONLY_TOOLS = ['file_open'];
+
 describe('core surface manifest invariants', () => {
   it('has no duplicate tool names', () => {
     expect(new Set(CORE_TOOL_SURFACE).size).toBe(CORE_TOOL_SURFACE.length);
@@ -43,7 +47,8 @@ describe('core surface manifest invariants', () => {
     // order-preserving full→core derivation holds unchanged.
     const fullNames = baseline.profiles.full.toolNames;
     const expected = fullNames.filter(
-      (name) => !EXCLUDED_PREFIXES.some((prefix) => name.startsWith(prefix)),
+      (name) =>
+        !EXCLUDED_PREFIXES.some((prefix) => name.startsWith(prefix)) && !FULL_ONLY_TOOLS.includes(name),
     );
     // deepEqual, not set equality: core must preserve the canonical
     // full-profile registration order so a host's cached ordering holds.
@@ -52,7 +57,7 @@ describe('core surface manifest invariants', () => {
 
   it('names the full surface with the browser list: core plus browser, nothing else', () => {
     const listedCore = CORE_TOOL_SURFACE.filter((name) => !UNLISTED_TOOLS_SET.has(name));
-    expect(new Set([...listedCore, ...BROWSER_TOOL_SURFACE])).toEqual(new Set(baseline.profiles.full.toolNames));
+    expect(new Set([...listedCore, ...BROWSER_TOOL_SURFACE, ...FULL_ONLY_TOOLS])).toEqual(new Set(baseline.profiles.full.toolNames));
     expect(BROWSER_TOOL_SURFACE.every((name) => name.startsWith('browser_'))).toBe(true);
   });
 

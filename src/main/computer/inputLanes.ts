@@ -79,6 +79,11 @@ export class ForegroundLease {
     return this.holder && this.held(now) ? this.holder.label : null;
   }
 
+  /** The key of the agent holding it now, or null. Internal: keys carry pane ids. */
+  holderKey(now: number): string | null {
+    return this.holder && this.held(now) ? this.holder.agentKey : null;
+  }
+
   clear(): void {
     this.holder = null;
     this.epoch += 1;
@@ -191,7 +196,10 @@ export interface LaneRequest {
  *   - click: a button other than left, any modifiers, more than one click;
  *   - hotkey: only with modifiers (one without is a plain key there);
  *   - type: text that can move focus (Core `Background.MovesFocus`);
- *   - pressKey, setValue: never (setValue is a UIA call: no input, no raise).
+ *   - pressKey, setValue: never. setValue is a UIA call, which brings a
+ *     covered window to the front, so the helper answers needs_foreground
+ *     for it (and for an index click's ladder) when the target is not in
+ *     front, and the upgrade takes the lease (#2978).
  * openApp has no row there (it is not a posted action).
  *
  * darwin, the rows of the macOS helper's `foregroundReason` that depend on

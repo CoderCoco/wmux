@@ -40,12 +40,14 @@ import ExecuteApprovalDialog from '../A2a/ExecuteApprovalDialog';
 import PermissionApprovalDialogContainer from '../Approval/PermissionApprovalDialogContainer';
 import CloseTabConfirm from '../Pane/CloseTabConfirm';
 import { isWorkSurfaceType } from '../Pane/surfaceKinds';
+import { forgetAutoResumeClaims } from '../Pane/Pane';
 import { initAtlasWakeRecovery } from '../../terminal/atlasWakeRecovery';
 import { windowDisplayedStore } from '../../hooks/useWindowDisplayed';
 import OnboardingOverlay from '../Onboarding/OnboardingOverlay';
 import FirstRunWizard from '../FirstRunWizard';
 import KeyboardCheatSheet from '../KeyboardCheatSheet';
 import ToastContainer from '../Toast/ToastContainer';
+import AgentStateAnnouncer from '../Accessibility/AgentStateAnnouncer';
 import { HooksInstallPromptContainer } from '../Deck/HooksInstallPrompt';
 import FloatingPane from '../Terminal/FloatingPane';
 import SearchResultsPanel from '../Search/SearchResultsPanel';
@@ -62,7 +64,9 @@ import { useCustomAgentsHydration } from '../../hooks/useCustomAgentsHydration';
 import { useA2aLinkRequestToast, useA2aRemoteSnapshot } from '../../hooks/useA2aRemoteSnapshot';
 import { useA2aRemoteBridge } from '../../hooks/useA2aRemoteBridge';
 import { useConnectionDropNotice } from '../../hooks/useConnectionDropNotice';
+import { useSecurityNotices } from '../../hooks/useSecurityNotices';
 import { useChromeProfileFallbackToast } from '../../hooks/useChromeProfileFallbackToast';
+import { useExpiredDecisionNotice } from '../../hooks/useExpiredDecisionNotice';
 import { useCloseTabOnShellExit } from '../../hooks/useCloseTabOnShellExit';
 import AgentMentionPicker from '../Palette/AgentMentionPicker';
 import HandoffPopover from '../Git/HandoffPopover';
@@ -72,6 +76,7 @@ import { useResizeGuard } from '../../hooks/useResizeGuard';
 import { useApprovalInboxBridge } from '../../hooks/useApprovalInboxBridge';
 import { useBrowserHelpBridge } from '../../hooks/useBrowserHelpBridge';
 import { useUsageLimitBridge } from '../../hooks/useUsageLimitBridge';
+import { useAgentMarkersBridge } from '../../hooks/useAgentMarkersBridge';
 import { useAgentAuthBridge } from '../../hooks/useAgentAuthBridge';
 import { useWorkspaceSettleBridge } from '../../hooks/useWorkspaceSettleBridge';
 import { useStarPromptSessionBridge } from '../../utils/starPrompt';
@@ -918,7 +923,10 @@ export default function AppLayout() {
   useA2aRemoteBridge();
   // A PC connection in use that really dropped (not a blip) gets one toast.
   useConnectionDropNotice();
+  // Daemon security notices: pinned in the notification panel until acknowledged.
+  useSecurityNotices();
   useChromeProfileFallbackToast();
+  useExpiredDecisionNotice();
   // `exit` in a shell closes its tab (clean exit only).
   useCloseTabOnShellExit();
   // Keep the main-process WorkspaceMirror warm: push the workspace tree +
@@ -936,6 +944,8 @@ export default function AppLayout() {
   // the store (and jump to its pane) whichever surface the operator is on.
   useBrowserHelpBridge();
   useUsageLimitBridge();
+  // Each pane's computer-use marker colour, for its sidebar row and tab dot.
+  useAgentMarkersBridge();
   // N4 — agents whose sign-in was lost: the toast with [Sign in again].
   useAgentAuthBridge();
   // Workspace settle / snooze — main owns the state; this mirrors it and
@@ -2049,7 +2059,14 @@ export default function AppLayout() {
         .finally(() => livenessSnapshotSettled(requestedAt));
     };
     hydrate();
-    const offConnected = window.electronAPI.daemon.onConnected(hydrate);
+    const offConnected = window.electronAPI.daemon.onConnected((info) => {
+      // A different daemon process recovered every pane: the old offers' claims are void.
+      if (info?.replaced === true) {
+        forgetAutoResumeClaims();
+        useStore.getState().resetResumeOffers();
+      }
+      hydrate();
+    });
     const offChanged = window.electronAPI.pty.onSupervisionChanged((payload) => {
       useStore.getState().setSupervision(payload.ptyId, payload.status, payload.restartCount);
     });
@@ -2259,6 +2276,12 @@ export default function AppLayout() {
           (titleBarStyle:'hidden'), so this bar owns window dragging. */}
       <ErrorBoundary name="Titlebar">
         <Titlebar />
+      </ErrorBoundary>
+      {/* Screen readers only: says when an agent needs you, finished or
+          failed. Outside the workspaces page, which goes inert under another
+          rail page. Renders nothing without a screen reader. */}
+      <ErrorBoundary name="AgentStateAnnouncer">
+        <AgentStateAnnouncer />
       </ErrorBoundary>
       {/* The icon rail sits on the window frame beside the floating sheet and
           stays when the sidebar collapses (MiniSidebar `rail`); the sheet holds

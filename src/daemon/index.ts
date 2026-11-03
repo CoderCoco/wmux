@@ -3,6 +3,7 @@ import '../shared/exeSearchGuard';
 import { isInternalForkPayload } from '../shared/hooks/internalFork';
 import { releaseDaemonFiles, replaceFileOrWrite, unlinkIfContent } from '../shared/daemon/daemonFiles';
 import { terminalCoreRuntime, terminalCoreSelection } from '../shared/terminalCoreSettings';
+import { labsSettingsAtStartup } from '../shared/labsSettings';
 import { collectDaemonMemoryDiagnostics } from './memoryDiagnostics';
 import { createStartupRecovery } from './startupRecovery';
 import { loadChatSkills } from './transcript/chatSkills';
@@ -129,6 +130,7 @@ import { isLoopbackHost } from './net/inboundSeen';
 import { FIREWALL_GROUP, currentRuleUser } from '../shared/netFirewallScripts';
 import { isIpv4, type FirewallListener } from '../shared/netFirewall';
 import { forgetHostCascade, registerA2aRemoteRpc } from './a2aRemote/rpc';
+import type { DiscoverClient } from './a2aRemote/discoverClient';
 import { PeerStore as A2aPeerStore } from './a2aRemote/peerStore';
 import { RemoteHostStore } from './a2aRemote/remoteHostStore';
 import { LinkStore } from './a2aRemote/linkStore';
@@ -312,6 +314,7 @@ import type { SessionPromptScheduleResult } from '../shared/sessionPromptSchedul
 import { claudeUsageLimitFromStopFailure, USAGE_LIMIT_CONTINUE_PROMPT, type PaneUsageLimitPatch } from '../shared/usageLimit';
 import { chatAgentStatus, confirmedStopAt, transcriptTurnEnd, transcriptTurnState } from './transcript/chatAgentStatus';
 import { DaemonPTYBridge } from './DaemonPTYBridge';
+import { shellChildAgent } from './shellChildAgent';
 import { createCodexSharedRuntime, runCodexDaemon } from './transcript/codexSharedRuntime';
 import { validChatAttachments } from '../shared/transcript/chatAttachments';
 import { agentStatesFor } from '../shared/agentStateBatch';
@@ -2586,8 +2589,11 @@ async function restartSupervisedSession(
     recovered = await sessionManager.createSessionAsync(replay);
   } catch (err) {
     if (!shuttingDown && !(err instanceof Error && err.message === 'Session creation cancelled')) sessionManager.reinsertSession(managed);
+    else sessionManager.releaseTombstone(managed);
     throw err;
   }
+  // The replacement holds the id now; the dead record is gone for good.
+  sessionManager.releaseTombstone(managed);
 
   // Carry the resume markers onto the recreated session meta. createSession builds
   // FRESH metadata, so without this the saveImmediate below drops the exact binding
@@ -3163,6 +3169,10 @@ function registerRpcHandlers(
       // bracketed-paste newlines; only the submitted CR/LF re-arms running.
       pipe.onInput((data: Buffer) => {
         const input = data.toString();
+        // Past the high-water mark (other writers can fill it while this client
+        // is not paused) the chunk waits in SessionPipe's retry slot instead of
+        // the PTY adapter, which drops input past its own bound.
+        if (((managed.ptyProcess as TerminalPty).pendingInputBytes ?? 0) >= 6 * 1024 * 1024) return false;
         try { managed.ptyProcess.write(data); }
         catch (error) {
           if (error instanceof Error && error.message.startsWith('PTY_BACKPRESSURE')) return false;
@@ -6107,6 +6117,14 @@ function registerRpcHandlers(
     ['Claude Code', 'Codex CLI'].includes(readDaemonAgentState(id).agentName ?? '')
       ? transcriptTurnEnd(projector.snapshot(id)?.events, 0)?.at
       : undefined;
+  // Windows only: the tracker names a new agent after its OSC 7501 query
+  // (#2838). An agent the pane took is launch evidence: the tracker probes now.
+  if (process.platform === 'win32') {
+    DaemonPTYBridge.shellChildAgentProbe = {
+      read: (pid, since) => shellChildAgent(pid, since),
+      accepted: (sessionId, pid) => agentProcessTracker.rearm(sessionId, pid),
+    };
+  }
   // Versioned method name is a rolling-upgrade safety boundary. An older
   // daemon's v1 handler would ignore the additive incarnationId parameter and
   // write anyway; v2 makes mixed versions fail with Unknown method pre-write.
@@ -6733,6 +6751,7 @@ function registerRpcHandlers(
     return {
       status: 'ok',
       ...(params?.includeTerminalCore === true ? { terminalCore: terminalCoreRuntime() } : {}),
+      ...(params?.includeLabs === true ? { labs: { ringCompression: sessionManager.ringCompressionEnabled() } } : {}),
       pid: process.pid,
       uptime,
       sessions: sessions.length,
@@ -8746,6 +8765,7 @@ const startupRecovery = createStartupRecovery({ log: (line) => log('info', line)
 let lanLinkServerRef: LanLinkServer | null = null;
 // Same for the cross-host A2A listener.
 let a2aServerRef: A2aServer | null = null;
+let a2aDiscoverRef: DiscoverClient | null = null;
 let a2aDeliveryRef: A2aRemoteDelivery | null = null;
 
 // Channels v2 — wake worker handle for shutdown + the emit fast path.
@@ -8994,6 +9014,7 @@ async function shutdown(
   try { lanLinkServerRef?.dispose(); } catch { /* best effort */ }
   try { void a2aDeliveryRef?.stop(); } catch { /* best effort */ }
   try { a2aServerRef?.dispose(); } catch { /* best effort */ }
+  try { a2aDiscoverRef?.dispose(); } catch { /* best effort */ }
   paneSupervisorRef = null;
 
   // Stop X1 context watchers (port poll timer + git fs.watch handles)
@@ -9128,6 +9149,7 @@ function logExitHandoff(via: string): void {
 
 async function main(): Promise<void> {
   terminalCoreSelection();
+  labsSettingsAtStartup();
   const startTime = Date.now();
   markDaemonBoot('main-start');
   log('info', `wmux-daemon starting (PID ${process.pid})`);
@@ -10324,7 +10346,7 @@ async function main(): Promise<void> {
     // The bridge validates the observation before retiring a previous owner,
     // so a stale async probe cannot invalidate the replacement launch.
     // The process truth the bridge's running-title path reads.
-    managed.bridge.noteAgentProcess(state);
+    managed.bridge.noteAgentProcess({ ...state, pid: agentProcessTracker.pidFor(sessionId) });
     const screenSlug = managed.bridge.getLastAgent();
     const canonical = canonicalIdentityFor(
       agentProcessTracker,
@@ -10611,11 +10633,15 @@ async function main(): Promise<void> {
       onPeerRevoked: a2aCascade,
       routes: a2aRoutes,
       log: a2aLog,
+      // The tailnet discovery probe tells other PCs this build's version.
+      discoverVersion: () => SPAWNED_BY_VERSION,
     });
     a2aServerRef = a2aServer;
+    // A discovery window ends with the app connection that opened it.
+    pipeServer.onClientClose((clientId) => a2aServer.discovery.clientGone(clientId));
     const onA2aRpc = (method: string, handler: (params: Record<string, unknown>) => Promise<unknown>): void =>
       pipeServer.onRpc(method, handler);
-    registerA2aRemoteRpc(onA2aRpc, {
+    const a2aRemoteRpc = registerA2aRemoteRpc(onA2aRpc, {
       controller: a2aRemoteController,
       server: a2aServer,
       peers: a2aPeers,
@@ -10623,6 +10649,9 @@ async function main(): Promise<void> {
       cascade: a2aCascade,
       log: a2aLog,
     });
+    // An outgoing discovery request ends with the app connection that made it, or with the daemon.
+    a2aDiscoverRef = a2aRemoteRpc.discover;
+    pipeServer.onClientClose((clientId) => a2aRemoteRpc.discover.clientGone(clientId));
     registerSpawnRpc(onA2aRpc, { policy: a2aSpawnPolicy, requests: a2aSpawnRequests, onSaved: (previous) => a2aSpawn.sendTargets(previous) });
     // Starting a conversation this PC received: main makes the worktree and the pane, the daemon places the files.
     registerContinueRpc(onA2aRpc, {

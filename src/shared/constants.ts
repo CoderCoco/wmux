@@ -159,6 +159,10 @@ export const IPC = {
   FANOUT_WORKER_MODE_SET: 'fanout:workerMode:set',
   FANOUT_REQUIRE_APPROVAL_GET: 'fanout:requireApproval:get',
   FANOUT_REQUIRE_APPROVAL_SET: 'fanout:requireApproval:set',
+  FANOUT_LIVE_CAP_GET: 'fanout:liveTaskCap:get',
+  FANOUT_LIVE_CAP_SET: 'fanout:liveTaskCap:set',
+  FANOUT_HOURLY_CAP_GET: 'fanout:hourlyTaskCap:get',
+  FANOUT_HOURLY_CAP_SET: 'fanout:hourlyTaskCap:set',
   FANOUT_TRUST_AGY_FOLDERS_GET: 'fanout:trustAgyFolders:get',
   FANOUT_TRUST_AGY_FOLDERS_SET: 'fanout:trustAgyFolders:set',
   WORKER_FENCE_OFF_GET: 'workerFence:off:get',
@@ -225,6 +229,10 @@ export const IPC = {
   //   DECK_MOA_CHANGED (send, main → renderer, no payload) says it moved.
   DECK_MOA_CHANGED: 'deck:moa:changed',
   DECK_MOA_DECISIONS: 'deck:moa:decisions',
+  //   DECK_EXPIRED_DECISIONS — the pending decisions an earlier version raised
+  //   that this startup removed, taken once for a one-time notice (a second
+  //   call gets none) ({ decisions: ExpiredDecision[] }, main/deck/deckDecisionStore.ts).
+  DECK_EXPIRED_DECISIONS: 'deck:expired-decisions',
   //   HOOKS_BRIDGE_* — the Claude Code hook bridge (wmux setup-hooks, in-app).
   //   STATUS reports whether the wmux hook entries are installed in
   //   ~/.claude/settings.json; INSTALL performs the same idempotent install as
@@ -361,6 +369,8 @@ export const IPC = {
   SECRET_GUARD_ENABLED: 'settings:secret-guard-enabled',
   TERMINAL_CORE_SETTINGS_GET: 'settings:terminal-core:get',
   TERMINAL_CORE_SETTINGS_SET: 'settings:terminal-core:set',
+  LABS_SETTINGS_GET: 'settings:labs:get',
+  LABS_SETTINGS_SET: 'settings:labs:set',
   // #1103 — the renderer's default-WSL-distro choice, pushed to main so
   // pty.create can inject `wsl.exe -d <distro>` at the shell-resolution
   // choke point without threading it through every create call.
@@ -475,6 +485,13 @@ export const IPC = {
   WORK_LINK_LIST: 'workLink:list',
   WORK_LINK_GET: 'workLink:get',
   WORK_LINK_CHANGED: 'workLink:changed',
+  // To hand out (src/shared/handOut.ts): the list, an add, a removal, a pick
+  // (main window only), and the push after any change.
+  HAND_OUT_LIST: 'handOut:list',
+  HAND_OUT_ADD: 'handOut:add',
+  HAND_OUT_REMOVE: 'handOut:remove',
+  HAND_OUT_PICK: 'handOut:pick',
+  HAND_OUT_CHANGED: 'handOut:changed',
   // Company presets: the launch line (and brief file) of each seat.
   COMPANY_SEAT_LAUNCHES: 'company:seatLaunches',
   // "Add a seat on this PC…": one seat's worktree, brief file and launch line.
@@ -686,6 +703,10 @@ export const IPC = {
   COMPUTER_USE_SET: 'computer-use:set',
   // macOS permission buttons: { op: 'request' | 'reset' | 'reveal' }, returns GET's shape.
   COMPUTER_USE_PERMISSIONS: 'computer-use:permissions',
+  // Each pane's computer-use marker colour (shared/computer/agentMarker.ts):
+  // invoke returns AgentMarkerEntry[]; main also sends the full list on this
+  // channel whenever a pane gets a colour.
+  COMPUTER_AGENT_MARKERS: 'computer-use:agent-markers',
   // Global quick launch (Settings › Shortcuts, and the floating composer).
   // SETTINGS_GET/SET return QuickLaunchSettingsPayload; the rest are the
   // composer window's own calls, refused from any other sender. The strings
@@ -794,6 +815,17 @@ export const IPC = {
   A2A_REMOTE_HOSTS_REMOVE: 'a2aRemote:hosts:remove',
   A2A_REMOTE_PEERS_LIST: 'a2aRemote:peers:list',
   A2A_REMOTE_PEERS_REVOKE: 'a2aRemote:peers:revoke',
+  // Tailnet discovery: this PC discoverable for 5 minutes and the card's
+  // decision; finding the tailnet's discoverable PCs and asking one.
+  A2A_REMOTE_DISCOVER_OPEN: 'a2aRemote:discover:open',
+  A2A_REMOTE_DISCOVER_CLOSE: 'a2aRemote:discover:close',
+  A2A_REMOTE_DISCOVER_STATUS: 'a2aRemote:discover:status',
+  A2A_REMOTE_DISCOVER_DECIDE: 'a2aRemote:discover:decide',
+  A2A_REMOTE_DISCOVER_SCAN: 'a2aRemote:discover:scan',
+  A2A_REMOTE_DISCOVER_CONNECT: 'a2aRemote:discover:connect',
+  A2A_REMOTE_DISCOVER_OUTGOING_STATUS: 'a2aRemote:discover:outgoing:status',
+  A2A_REMOTE_DISCOVER_OUTGOING_CANCEL: 'a2aRemote:discover:outgoing:cancel',
+  A2A_REMOTE_DISCOVER_OUTGOING_CONFIRM: 'a2aRemote:discover:outgoing:confirm',
   // Exposure and pane links. SNAPSHOT is the renderer's whole pane tree (main
   // diffs it for gone panes and publishes the exposed part); LINK_EVENT is the
   // main → renderer push of daemon link nudges.
@@ -913,9 +945,15 @@ export const IPC = {
   // user decision bound to the content hash the approval UI displayed.
   PROJECT_CONFIG_GET: 'project-config:get',
   PROJECT_CONFIG_SET_TRUST: 'project-config:set-trust',
+  // The whole file and its hash, for the company review's view of it.
+  PROJECT_CONFIG_TEXT: 'project-config:text',
   WORKSPACE_PREP_NOTICE: 'workspace-prep:notice',
   PROJECT_PREP_GET: 'project-config:prep-get',
   PROJECT_PREP_SAVE: 'project-config:prep-save',
+  // The folder's company in its wmux.json (insight 170): what the New
+  // company dialog reads, and its save (which trusts the written bytes).
+  PROJECT_COMPANY_GET: 'project-config:company-get',
+  PROJECT_COMPANY_SAVE: 'project-config:company-save',
   WORKSPACE_PREP_EVENT: 'workspace-prep:event',
   WORKSPACE_PREP_LIST: 'workspace-prep:list',
   WORKSPACE_PREP_DECIDE: 'workspace-prep:decide',

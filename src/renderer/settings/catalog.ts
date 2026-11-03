@@ -6,6 +6,7 @@ export type SettingsTabId =
   | 'terminal'
   | 'shortcuts'
   | 'notifications'
+  | 'labs'
   | 'claude-integration'
   | 'accounts'
   | 'factory'
@@ -66,7 +67,7 @@ export const SETTINGS_NAV_GROUPS: {
 }[] = [
   {
     id: 'app',
-    tabs: ['general', 'appearance', 'terminal', 'shortcuts', 'notifications'],
+    tabs: ['general', 'appearance', 'terminal', 'shortcuts', 'notifications', 'labs'],
   },
   {
     id: 'agents',
@@ -166,6 +167,9 @@ export const SETTINGS_CATALOG: SettingsCatalogEntry[] = [
   { id: 'catmute', tab: 'notifications', labelKey: 'settings.notificationCategories', descKey: 'settings.notificationCategoriesDesc', synonyms: 'mute category subagent approval' },
   { id: 'wsmute', tab: 'notifications', labelKey: 'settings.perWorkspaceNotifications', descKey: 'settings.perWorkspaceNotificationsDesc', synonyms: 'mute workspace quiet' },
   { id: 'wsprwake', tab: 'notifications', labelKey: 'settings.prWake', descKey: 'settings.prWakeDesc', synonyms: 'pull request ci checks review comment conflict nudge agent' },
+  { id: 'labs-compact-scrollback', tab: 'labs', labelKey: 'settings.labsCompactScrollback', descKey: 'settings.labsCompactScrollbackDesc', synonyms: 'labs experimental memory ram scrollback compress 실험 메모리 압축 스크롤백' },
+  { id: 'labs-shared-webgl', tab: 'labs', labelKey: 'settings.labsSharedWebgl', descKey: 'settings.labsSharedWebglDesc', synonyms: 'labs experimental gpu webgl renderer atlas memory 실험 그래픽 메모리' },
+  { id: 'labs-ring-compression', tab: 'labs', labelKey: 'settings.labsRingCompression', descKey: 'settings.labsRingCompressionDesc', synonyms: 'labs experimental daemon buffer compress memory 실험 데몬 버퍼 압축 메모리' },
 
   { id: 'quicklaunch', tab: 'shortcuts', labelKey: 'settings.quickLaunch', descKey: 'settings.quickLaunchDesc', synonyms: 'quick launch global shortcut hotkey composer spotlight launcher prompt 빠른 실행 전역 단축키' },
   { id: 'quicklaunchkey', tab: 'shortcuts', labelKey: 'settings.quickLaunchShortcut', descKey: 'settings.quickLaunchShortcutDesc', synonyms: 'quick launch global hotkey cmd shift space 빠른 실행 단축키' },
@@ -204,6 +208,8 @@ export const SETTINGS_CATALOG: SettingsCatalogEntry[] = [
   { id: 'roles', tab: 'roles', labelKey: 'settings.roleBindings', descKey: 'settings.roleBindingsDesc', synonyms: 'role reviewer tester planner model bind' },
   { id: 'a2a', tab: 'roles', labelKey: 'settings.a2aAutoApproveExecute', descKey: 'settings.a2aAutoApproveExecuteDesc', synonyms: 'a2a execute approve' },
   { id: 'fanoutapproval', tab: 'roles', labelKey: 'settings.fanoutRequireApproval', descKey: 'settings.fanoutRequireApprovalDesc', synonyms: 'fanout fan-out approval approve prompt unattended ask' },
+  { id: 'fanoutlivecap', tab: 'roles', labelKey: 'settings.fanoutLiveTaskCap', descKey: 'settings.fanoutLiveTaskCapDesc', synonyms: 'fanout fan-out cap limit live concurrent at once tasks brake 동시 한도' },
+  { id: 'fanouthourlycap', tab: 'roles', labelKey: 'settings.fanoutHourlyTaskCap', descKey: 'settings.fanoutHourlyTaskCapDesc', synonyms: 'fanout fan-out cap limit hourly per hour rate tasks brake 시간당 한도' },
   { id: 'workerfence', tab: 'roles', labelKey: 'settings.workerFence', descKey: 'settings.workerFenceDesc', synonyms: 'worker fence sandbox bot unattended bypass auto credentials 울타리 샌드박스 봇 워커' },
   { id: 'fanoutagytrust', tab: 'roles', labelKey: 'settings.fanoutTrustAgyFolders', descKey: 'settings.fanoutTrustAgyFoldersDesc', synonyms: 'agy antigravity trust trusted folder workspace fanout fan-out' },
   { id: 'fanoutworkers', tab: 'roles', labelKey: 'settings.fanoutWorkerPermissionMode', descKey: 'settings.fanoutWorkerPermissionModeDesc', synonyms: 'fanout fan-out worker permission auto bypass sandbox' },

@@ -103,16 +103,15 @@ const SURFACE_NEW_SHAPE = {
 const FILE_OPEN_SHAPE = {
   path: z
     .string()
-    .describe("File to show: absolute path (a /tmp path from WSL works), file:// URL, or a path relative to your pane's cwd."),
-  line: z.number().int().positive().optional().describe('1-based line to scroll to.'),
+    .describe('Path or file:// URL'),
+  line: z.number().int().positive().optional().describe('1-based'),
   paneId: z
     .string()
     .optional()
-    .describe("Pane to open the tab in (pane_list id or #pane name). Omit for your own workspace's active pane."),
+    .describe('Pane id or #name'),
   workspaceId: z
     .string()
-    .optional()
-    .describe("Target workspace by id. Omit to use your own (the caller's) workspace."),
+    .optional(),
 };
 
 const SURFACE_CLOSE_SHAPE = {
@@ -235,9 +234,9 @@ export function createPaneLifecycleToolCatalog(
     defineWmuxTool({
       name: 'file_open',
       description:
-        'Open a file in a read-only wmux editor or preview tab (markdown, text, code, images, PDF) so the user can read it. Use it to show a file you wrote, e.g. under /tmp. Paths from a WSL pane are translated for the Windows host. Fails with a clear error if the file is missing, binary, over 1 MB, or blocked by wmux.',
+        'Open a file in a read-only tab. WSL paths are translated. Fails if missing, binary, >1 MB, or blocked.',
       inputSchema: FILE_OPEN_SHAPE,
-      profiles: ['full', 'core'],
+      profiles: ['full'],
       invoke: async ({ path, line, paneId, workspaceId }) => {
         const params: Record<string, unknown> = { path };
         if (line !== undefined) params['line'] = line;

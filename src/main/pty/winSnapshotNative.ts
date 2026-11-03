@@ -46,6 +46,8 @@
 export interface NativeProcRow {
   pid: number;
   ppid: number;
+  /** Image file name (`claude.exe`), when the walk was asked for names. */
+  name?: string;
 }
 
 export interface NativeConnRow {
@@ -79,6 +81,8 @@ const MAX_TCP_TABLE_BYTES = 64 * 1024 * 1024;
 export const PROCESSENTRY32W_SIZE = 568;
 const PE32_PID_OFFSET = 8; // th32ProcessID
 const PE32_PPID_OFFSET = 32; // th32ParentProcessID
+const PE32_EXE_OFFSET = 44; // szExeFile, WCHAR[260]
+const PE32_EXE_BYTES = 520;
 
 /** MIB_TCPROW_OWNER_PID: 6 DWORDs. Port is the low word, network byte order. */
 export const TCP_ROW4_SIZE = 24;
@@ -136,6 +140,13 @@ export function decodeProcessEntry(buf: Buffer): NativeProcRow {
   };
 }
 
+/** The image file name in a PROCESSENTRY32W buffer, up to its NUL. */
+export function decodeProcessName(buf: Buffer): string {
+  const text = buf.toString('utf16le', PE32_EXE_OFFSET, PE32_EXE_OFFSET + PE32_EXE_BYTES);
+  const end = text.indexOf('\0');
+  return end === -1 ? text : text.slice(0, end);
+}
+
 type Handle = number | bigint;
 
 /** The kernel32/iphlpapi calls this module makes (exported for tests). */
@@ -160,6 +171,9 @@ export interface NativeBindings {
   WaitForSingleObject: (handle: Handle, ms: number) => number;
   GetSystemTimeAsFileTime: (out: Buffer) => void;
   GetExitCodeProcess: (handle: Handle, code: Buffer) => number;
+  NtQueryInformationProcess: (handle: Handle, infoClass: number, info: Buffer, length: number, returned: Buffer) => number;
+  /** Address of a buffer's memory (koffi.address), which is what a call receives for it. */
+  addressOf: (buf: Buffer) => bigint;
 }
 
 /** undefined = load not attempted yet; null = attempted and unavailable. */
@@ -194,9 +208,11 @@ function loadBindings(): NativeBindings | null {
       load(name: string): {
         func(name: string, result: string, args: string[]): unknown;
       };
+      address(value: Buffer): bigint;
     };
     const iphlpapi = koffi.load('iphlpapi.dll');
     const kernel32 = koffi.load('kernel32.dll');
+    const ntdll = koffi.load('ntdll.dll');
     bindings = {
       GetExtendedTcpTable: iphlpapi.func('GetExtendedTcpTable', 'uint32', [
         'void *', 'void *', 'int', 'uint32', 'uint32', 'uint32',
@@ -233,6 +249,10 @@ function loadBindings(): NativeBindings | null {
       GetExitCodeProcess: kernel32.func('GetExitCodeProcess', 'int', [
         'int64', 'void *',
       ]) as NativeBindings['GetExitCodeProcess'],
+      NtQueryInformationProcess: ntdll.func('NtQueryInformationProcess', 'int32', [
+        'int64', 'int', 'void *', 'uint32', 'void *',
+      ]) as NativeBindings['NtQueryInformationProcess'],
+      addressOf: (buf) => koffi.address(buf),
     };
   } catch (err) {
     warn(`koffi load failed — native snapshot disabled: ${err instanceof Error ? err.message : String(err)}`);
@@ -278,7 +298,7 @@ function readTcpTable(
   throw new Error(`GetExtendedTcpTable(af=${family}) failed: ${rc}`);
 }
 
-function readProcessTable(b: NativeBindings): NativeProcRow[] {
+function readProcessTable(b: NativeBindings, withNames = false): NativeProcRow[] {
   const raw = b.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
   const handle = typeof raw === 'bigint' ? raw : BigInt(raw);
   // INVALID_HANDLE_VALUE is -1 read as a signed 64-bit value.
@@ -295,7 +315,7 @@ function readProcessTable(b: NativeBindings): NativeProcRow[] {
     // successful snapshot, and every session's ports would resolve to none.
     if (!ok) throw new Error('Process32FirstW failed — no process table');
     while (ok) {
-      procs.push(decodeProcessEntry(entry));
+      procs.push(withNames ? { ...decodeProcessEntry(entry), name: decodeProcessName(entry) } : decodeProcessEntry(entry));
       ok = b.Process32NextW(raw, entry);
     }
     // A false return means "walk over" ONLY when the last error says so.
@@ -454,6 +474,38 @@ export function tryProcessCreatedAt(pid: number): bigint | null {
   }
 }
 
+/**
+ * `rootPid` and its direct children, with their image names, read at once:
+ * what a pane's shell runs right now (#2838). A child created before its
+ * parent is an orphan of an earlier process that had the pid (Windows never
+ * re-parents), and one whose creation time cannot be read cannot be told from
+ * such an orphan: both are left out. Null when the table cannot be read or
+ * `rootPid` is not in it. Never throws.
+ */
+export function tryProcessFamily(rootPid: number): Array<NativeProcRow & { name: string }> | null {
+  if (!Number.isInteger(rootPid) || rootPid <= 0 || loadFailed) return null;
+  const b = loadBindings();
+  if (!b) {
+    loadFailed = true;
+    return null;
+  }
+  let procs: NativeProcRow[];
+  try {
+    procs = readProcessTable(b, true);
+  } catch {
+    return null;
+  }
+  const root = procs.find((p) => p.pid === rootPid);
+  if (!root) return null;
+  const rootCreated = tryProcessCreatedAt(rootPid);
+  const children = rootCreated === null ? [] : procs.filter((p) => {
+    if (p.ppid !== rootPid || p.pid === rootPid) return false;
+    const created = tryProcessCreatedAt(p.pid);
+    return created !== null && created >= rootCreated;
+  });
+  return [root, ...children].map((p) => ({ pid: p.pid, ppid: p.ppid, name: p.name ?? '' }));
+}
+
 /** OpenProcess on a pid that no longer exists. */
 const ERROR_INVALID_PARAMETER = 87;
 
@@ -534,6 +586,73 @@ export function tryProcessIdentity(pid: number): ProcessIdentityRow | ProcessIde
     }
   } catch (err) {
     return { failure: err instanceof Error ? err.message : String(err), gone: false };
+  }
+}
+
+/** NtQueryInformationProcess class for the command line (Windows 8.1+); query-limited access is enough. */
+const PROCESS_COMMAND_LINE_INFORMATION = 60;
+/** The "buffer too small" NTSTATUS values, as the signed int32 the call returns. */
+const STATUS_INFO_LENGTH_MISMATCH = 0xc0000004 | 0;
+const STATUS_BUFFER_OVERFLOW = 0x80000005 | 0;
+const STATUS_BUFFER_TOO_SMALL = 0xc0000023 | 0;
+/** sizeof(UNICODE_STRING) on 64-bit: Length, MaximumLength, padding, Buffer at 8. */
+const UNICODE_STRING_SIZE = 16;
+/** Largest buffer asked for: 32 Ki UTF-16 chars plus the header, rounded up (as the native core's). */
+const COMMAND_LINE_CAP = 1 << 20;
+
+/**
+ * Decode ProcessCommandLineInformation output: a UNICODE_STRING header whose
+ * Buffer points at its characters further into the same buffer. `base` is the
+ * buffer's address; the string is taken only if it lies inside the buffer.
+ * Null for an empty or malformed result.
+ */
+export function decodeCommandLine(buf: Buffer, base: bigint): string | null {
+  if (buf.length < UNICODE_STRING_SIZE) return null;
+  const length = buf.readUInt16LE(0);
+  const start = buf.readBigUInt64LE(8);
+  if (length === 0 || length % 2 !== 0 || start < base + BigInt(UNICODE_STRING_SIZE)) return null;
+  const offset = start - base;
+  if (offset + BigInt(length) > BigInt(buf.length)) return null;
+  return buf.toString('utf16le', Number(offset), Number(offset) + length) || null;
+}
+
+/**
+ * One process's command line, read through its handle (#2992), the read the
+ * native core's process table makes (#2908). The launcher's identity check
+ * asked PowerShell's CIM for it, which fails where policy or anti-virus stops
+ * PowerShell. Null when it cannot be read: not Windows, native reads
+ * unavailable, the process is gone or protected, or the line is empty. Never
+ * throws.
+ */
+export function readProcessCommandLine(pid: number): string | null {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  const b = loadFailed ? null : loadBindings();
+  if (!b) {
+    loadFailed = true;
+    return null;
+  }
+  try {
+    const raw = b.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+    const handle = typeof raw === 'bigint' ? raw : BigInt(raw);
+    if (handle === 0n) return null;
+    try {
+      // The reported length is only a lower bound, so a too-small answer
+      // that leaves it at 0 still doubles the buffer.
+      for (let bytes = 512; ;) {
+        const info = Buffer.alloc(bytes);
+        const needed = Buffer.alloc(4);
+        const status = b.NtQueryInformationProcess(raw, PROCESS_COMMAND_LINE_INFORMATION, info, bytes, needed);
+        if (status >= 0) return decodeCommandLine(info, b.addressOf(info));
+        const tooSmall = status === STATUS_INFO_LENGTH_MISMATCH || status === STATUS_BUFFER_OVERFLOW
+          || status === STATUS_BUFFER_TOO_SMALL;
+        if (!tooSmall || bytes >= COMMAND_LINE_CAP) return null;
+        bytes = Math.min(COMMAND_LINE_CAP, Math.max(bytes * 2, Math.ceil(needed.readUInt32LE(0) / 8) * 8));
+      }
+    } finally {
+      b.CloseHandle(raw);
+    }
+  } catch {
+    return null;
   }
 }
 

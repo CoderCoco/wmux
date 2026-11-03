@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { app, dialog } from 'electron';
 import { markBoot } from '../util/bootTrace';
-import { daemonStageRootIn, isSquirrelInstall, stageDaemonRuntime, stagedDaemonScripts } from './daemonRuntimeStage';
+import { daemonStageRootIn, isSquirrelInstall, stageDaemonRuntime, stagedDaemonExePath, stagedDaemonScripts } from './daemonRuntimeStage';
 import { getWmuxDir } from '../../daemon/config';
 import {
   classifyTasklistOutput,
@@ -132,6 +132,14 @@ function daemonStageRoot(): string | null {
   return daemonStageRootIn(getWmuxDir());
 }
 
+/** The staged wmux.exe this build's daemon runs from; null where there is no copy. */
+export function stagedDaemonExe(): string | null {
+  const stageRoot = daemonStageRoot();
+  const appDir = path.dirname(process.execPath);
+  if (!stageRoot || !isSquirrelInstall(appDir)) return null;
+  return stagedDaemonExePath({ appDir, exeName: path.basename(process.execPath), stageRoot, version: app.getVersion() });
+}
+
 /**
  * Candidate paths for the daemon entry script — production (extraResource),
  * production fallback (old layout), development (esbuild bundle),
@@ -200,7 +208,7 @@ const electronDeps: DaemonLauncherDeps = {
   // LaunchServices treats as ending its subordinate processes) keeps it alive.
   launchViaLaunchdOnDarwin: true,
   markBoot,
-  stageDaemonRuntime: () => {
+  stageDaemonRuntime: async () => {
     const stageRoot = daemonStageRoot();
     const appDir = path.dirname(process.execPath);
     // The copy is only needed where Squirrel's Setup.exe would kill a daemon under the install root.
@@ -211,6 +219,7 @@ const electronDeps: DaemonLauncherDeps = {
       stageRoot,
       version: app.getVersion(),
       warn: (msg) => console.warn(msg),
+      log: (msg) => console.log(msg),
     });
   },
 };

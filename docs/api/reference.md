@@ -7,7 +7,7 @@
 
 # wmux API Reference (generated)
 
-> **Generated from wmux v4.13.0 sources.** This file is produced by
+> **Generated from wmux v4.14.0 sources.** This file is produced by
 > `scripts/gen-api-reference.mjs` directly from the code — it lists every
 > RPC method, event type, required capability, and the key event-bus
 > constants exactly as the running daemon sees them. For the hand-curated
@@ -26,7 +26,7 @@ returns `EPERM`. Wire framing: newline-delimited JSON, one object per line.
 
 ## RPC methods
 
-Total: **295** methods (`ALL_RPC_METHODS` in
+Total: **316** methods (`ALL_RPC_METHODS` in
 `src/shared/rpc.ts`). Capability and risk class are read from
 `src/main/mcp/methodCapabilityMap.ts`:
 
@@ -200,6 +200,15 @@ Total: **295** methods (`ALL_RPC_METHODS` in
 | `a2a.remote.hosts.remove` | `wmux.internal` |  |
 | `a2a.remote.peers.list` | `wmux.internal` |  |
 | `a2a.remote.peers.revoke` | `wmux.internal` |  |
+| `a2a.remote.discover.open` | `wmux.internal` |  |
+| `a2a.remote.discover.close` | `wmux.internal` |  |
+| `a2a.remote.discover.status` | `wmux.internal` |  |
+| `a2a.remote.discover.decide` | `wmux.internal` |  |
+| `a2a.remote.discover.scan` | `wmux.internal` |  |
+| `a2a.remote.discover.connect` | `wmux.internal` |  |
+| `a2a.remote.discover.outgoing.status` | `wmux.internal` |  |
+| `a2a.remote.discover.outgoing.cancel` | `wmux.internal` |  |
+| `a2a.remote.discover.outgoing.confirm` | `wmux.internal` |  |
 | `a2a.remote.exposure.publish` | `wmux.internal` |  |
 | `a2a.remote.exposure.get` | `wmux.internal` |  |
 | `a2a.remote.exposure.list` | `wmux.internal` |  |
@@ -332,6 +341,8 @@ Total: **295** methods (`ALL_RPC_METHODS` in
 | `agent.state` | `agent.state.read` | `agent-state` |
 | `agent.state.all` | `agent.state.read.all` | `agent-state-all` |
 | `fleet.triage` | `terminal.read` | `terminal-content` |
+| `handOut.list` | `a2a.read` | `a2a` |
+| `handOut.add` | `a2a.send` | `a2a` |
 | `ui.decoratePane` | `ui.pane-decoration` | `ui` |
 | `codex.relay.prepare` | `wmux.internal` |  |
 | `codex.relay.close` | `wmux.internal` |  |
@@ -344,6 +355,16 @@ Total: **295** methods (`ALL_RPC_METHODS` in
 | `deck.state.prune` | `wmux.internal` |  |
 | `usage.rateLimits` | `wmux.internal` |  |
 | `usage.trail` | `wmux.internal` |  |
+| `fs.list` | `fs.read` | `files` |
+| `fs.stat` | `fs.read` | `files` |
+| `fs.readText` | `fs.read` | `files` |
+| `fs.mkdir` | `fs.write` | `files-write` |
+| `fs.rename` | `fs.write` | `files-write` |
+| `fs.copy` | `fs.write` | `files-write` |
+| `fs.move` | `fs.write` | `files-write` |
+| `fs.trash` | `fs.write` | `files-write` |
+| `fs.job.status` | `fs.write` | `files-write` |
+| `fs.job.cancel` | `fs.write` | `files-write` |
 | `pc.envDiff` | `wmux.internal` |  |
 | `commit.origin` | `wmux.internal` |  |
 | `task.mission.start` | `a2a.channel.send` | `a2a` |

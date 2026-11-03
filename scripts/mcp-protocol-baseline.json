@@ -3,7 +3,7 @@
   "profiles": {
     "full": {
       "maxListBytes": 80000,
-      "wireResultSha256": "ebb976feae19d4fbab131ea7507535386ff31eaf34a7b350e507017734284c81",
+      "wireResultSha256": "d11a511adb35ea804ff622bf7f81cd4be809c4bb5a8aae862afa9914aa554cc3",
       "instructionSha256": "6e09a08a7038bb08f49484e3a98020ef6a35efebbebc39d33f9a514b71e7c7c1",
       "toolNames": [
         "browser_open",
@@ -72,6 +72,7 @@
         "channel_mission_list",
         "fanout_start",
         "remote_spawn",
+        "hand_out",
         "ledger_update",
         "task_push",
         "task_fetch",
@@ -92,7 +93,7 @@
     },
     "core": {
       "maxListBytes": 49000,
-      "wireResultSha256": "7d694c69df21010ca8a7d0bddfedaa5a8dfcf225b22d2c9ab45801b011424412",
+      "wireResultSha256": "c9fab0aa7cf2db0f73aa30033516be91fd037aeaeda3cbe0781b421d515758b8",
       "instructionSha256": "4a87aa8208502b84c23fd41c6c2594b91c7e368ad187f14d4905164448548f4a",
       "toolNames": [
         "terminal_read",
@@ -129,6 +130,7 @@
         "channel_mission_list",
         "fanout_start",
         "remote_spawn",
+        "hand_out",
         "ledger_update",
         "task_push",
         "task_fetch",
@@ -141,7 +143,6 @@
         "surface_new",
         "surface_close",
         "pane_stash",
-        "file_open",
         "repl_run",
         "repl_reset",
         "repl_sessions"

@@ -233,7 +233,8 @@ describe('file_open', () => {
     expect(mockCallRpc).toHaveBeenCalledWith('file.open', { path: '/tmp/x.md' });
   });
 
-  it('is not in the commander profile', () => {
+  it('is full-profile only (not core, not commander)', () => {
+    expect(collectTools('core').has('file_open')).toBe(false);
     expect(collectTools('commander').has('file_open')).toBe(false);
   });
 });
