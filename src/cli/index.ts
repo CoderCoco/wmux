@@ -16,7 +16,7 @@ import { handleInput } from './commands/input';
 import { handleNotify } from './commands/notify';
 import { handleSystem } from './commands/system';
 import { handleBrowser, handleOpen } from './commands/browser';
-import { handleOpenFile, isFileOpenTarget } from './commands/openFile';
+import { handleOpenFile, isFileOpenTarget, openTarget } from './commands/openFile';
 import { handleGate } from './commands/gate';
 import { handleMcp } from './commands/mcp';
 import { handleSetupHooks } from './commands/setupHooks';
@@ -348,7 +348,7 @@ async function main(): Promise<void> {
     } else if (SYSTEM_CMDS.has(cmd)) {
       await handleSystem(cmd, rest, jsonMode);
     } else if (cmd === 'open') {
-      const target = rest.find((a) => !a.startsWith('--'));
+      const target = openTarget(rest);
       if (target !== undefined && isFileOpenTarget(target)) await handleOpenFile(rest, jsonMode);
       else await handleOpen(rest, jsonMode);
     } else if (cmd === 'browser') {

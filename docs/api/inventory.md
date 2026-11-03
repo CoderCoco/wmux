@@ -65,6 +65,7 @@ new MCP tool or declarable capability is exposed. Main forwards to first-party-o
 |---|---|---|---|
 | `surface.list` | `{ workspaceId?, includeStashed? }` | stable | Surfaces (terminals/browsers) in a workspace. Omitted ⇒ active workspace. `includeStashed: true` (#977) also returns surfaces of stashed panes; every row carries an explicit `stashed` boolean either way, and a stashed pane's surfaces always report `isActive: false` (nothing off-screen is focused). |
 | `surface.new` | `{ workspaceId?, shell?, cwd? }` | stable | Opens a new surface in the active pane. External MCP callers SHOULD pass `workspaceId` to target their own workspace (#236 family); omitted ⇒ active workspace. Fails closed on an explicit unknown id. |
+| `file.open` | `{ path, line?, paneId?, workspaceId?, ptyId? }` | stable | Shows a file in a read-only editor or preview tab (never an edit session). The renderer picks the pane (`paneId`, else `ptyId`'s pane, else the workspace's active pane) and resolves the path WSL-aware, as a terminal click does. A relative path resolves against that pane's cwd. Commander callers are confined to their own workspace. |
 | `surface.focus` | `{ id }` | stable | Focuses a surface (resolved across all workspaces). |
 | `surface.close` | `{ id }` | stable | Closes a surface by globally-unique id (all-workspace). A browser tab the user paused or took over (Stop / Take over in the pane) is refused with `BROWSER_AGENT_PAUSED` / `BROWSER_USER_IN_CONTROL`, and so is `pane.close` / `workspace.close` on what holds it. That includes `wmux surface close <id>` typed in a terminal, on purpose: the pipe cannot tell it from an agent's shell, so the tab is closed from the pane's own controls. |
 
@@ -212,6 +213,7 @@ The surface a server registers is chosen once, by a launch argument in the host 
 | `pane_focus` | `pane.focus` | Focus a leaf pane by `paneId` — **non-yank** (does not switch the on-screen workspace; use `workspace.focus` for that). Issue #285. |
 | `surface_new` | `surface.new` | Open a new surface (CREATE family — optional `workspaceId`/`shell`/`cwd`, defaults to the caller's own workspace). Issue #285. |
 | `surface_close` | `surface.close` | Close a surface by globally-unique `surfaceId` (resolved across all workspaces). Issue #285. |
+| `file_open` | `file.open` | Open a file in a read-only editor/preview tab (CREATE family — optional `line`, `paneId`/`workspaceId`/`ptyId` to pick the pane). In both the full and core tool profiles. |
 | `pane_stash` | `pane.stash` / `pane.unstash` | Take a leaf pane out of the layout, keeping its session running; `restore: true` puts a stashed pane back (idempotent — the remedy named by every `PANE_STASHED` error). Issue #977. |
 | `pane_unstash` | `pane.unstash` | Unlisted pre-merge alias of `pane_stash {restore:true}` — still callable via `tools/call` for one release. |
 | `terminal_read` | `input.readScreen` | |

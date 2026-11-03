@@ -35,9 +35,9 @@ function refocusActiveTerminal(): void {
   });
 }
 
-/** Tabs that run nothing (a file viewer, a diff, a board): closing one loses
- *  no process, so it closes at once instead of asking. */
-const NO_CONFIRM_TYPES: ReadonlySet<string> = new Set(['editor', 'preview', 'diff', 'board', 'git', 'review']);
+/** Read-only file viewers (editor, preview): closing one loses nothing, so it
+ *  closes at once instead of asking. Diff, board, git and review still ask. */
+const NO_CONFIRM_TYPES: ReadonlySet<string> = new Set(['editor', 'preview']);
 
 /** The one close-tab confirm, raised by the tab × and the close-tab shortcut.
  *  Cancel holds the initial focus, so Enter keeps the tab; Escape cancels too. */

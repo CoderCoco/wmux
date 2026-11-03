@@ -261,7 +261,7 @@ export default function EditorPanel({ filePath, isActive, surfaceId, line, lineS
                         data-editor-line-marked={marked ? '' : undefined}
                         className="block"
                         style={marked
-                          ? { background: 'var(--selection)', boxShadow: 'inset 2px 0 0 var(--accent)' }
+                          ? { background: 'var(--selection)', boxShadow: 'var(--select-ring)' }
                           : undefined}
                       >
                         {text}

@@ -1472,7 +1472,7 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
     terminal.options.linkHandler = createOsc8LinkHandler(
       activateTerminalUrl,
       undefined,
-      (_event, uri) => openTerminalPath(uri),
+      (_event, uri) => openTerminalPath(uri, undefined, true),
     );
     const webLinksAddon = new WebLinksAddon(activateTerminalUrl);
     terminal.loadAddon(fitAddon);
@@ -1503,10 +1503,11 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
     };
     // Path and `file:` clicks open in a wmux tab by default (setting
     // terminalOpenFileLinksIn); the OS opener stays the fallback.
-    const openTerminalPath = (filePath: string, location?: PathLocation): void => {
+    const openTerminalPath = (filePath: string, location?: PathLocation, viewerOnly = false): void => {
       void openTerminalFileLink(filePath, location, ptyIdRef.current || undefined, {
         openWithOs,
         onFailure: () => showOpenPathToast('terminal.openPathFailed'),
+        viewerOnly,
       }).catch((err: unknown) => {
         console.warn('[useTerminal] open file link failed:', err);
       });

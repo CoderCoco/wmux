@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { sendRequest, setWorkspaceToken } from '../client';
 import { printResult, ensureOk, parseFlag } from '../utils';
@@ -14,7 +15,28 @@ export function isFileOpenTarget(target: string, exists: (p: string) => boolean 
   if (/^file:\/\//i.test(target)) return true;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) return false;
   if (/^(?:[A-Za-z]:[\\/]|\\\\|\/|\.{1,2}[\\/]|~[\\/])/.test(target)) return true;
-  return exists(target);
+  // `notes.md:12` names notes.md at line 12: test the file without the suffix
+  // (the full text first, in case the file really is called `a:12`).
+  return exists(target) || exists(target.replace(/:\d+(?::\d+)?$/, ''));
+}
+
+/** Flags of `wmux open` that take a value, so their value is not the target. */
+const OPEN_VALUE_FLAGS = new Set(['--line', '--workspace']);
+
+/** The first positional argument of `wmux open`, skipping flags and their values. */
+export function openTarget(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    if (OPEN_VALUE_FLAGS.has(args[i])) { i++; continue; }
+    if (!args[i].startsWith('--')) return args[i];
+  }
+  return undefined;
+}
+
+/** `~` and `~/x` mean this machine's home directory; the app does not expand them. */
+function expandHome(target: string): string {
+  if (target === '~') return homedir();
+  if (target.startsWith('~/') || target.startsWith('~\\')) return path.join(homedir(), target.slice(2));
+  return target;
 }
 
 /**
@@ -26,13 +48,7 @@ export function isFileOpenTarget(target: string, exists: (p: string) => boolean 
  * workspace's pane is used.
  */
 export async function handleOpenFile(args: string[], jsonMode: boolean): Promise<void> {
-  const valueFlags = new Set(['--line', '--workspace']);
-  const positional: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    if (valueFlags.has(args[i])) { i++; continue; }
-    if (!args[i].startsWith('--')) positional.push(args[i]);
-  }
-  const target = positional[0];
+  const target = openTarget(args);
   if (!target) {
     console.error('Error: open requires <path> — e.g. `wmux open /tmp/notes.md`');
     process.exit(1);
@@ -59,8 +75,9 @@ export async function handleOpenFile(args: string[], jsonMode: boolean): Promise
 
   // Only a plain relative path needs the CLI's cwd; the app resolves the rest
   // (including a WSL pane's POSIX paths) with the pane's own context.
-  const isRelative = !/^(?:file:\/\/|[A-Za-z]:[\\/]|\\\\|\/|~)/i.test(target);
-  const sendPath = isRelative ? path.resolve(target) : target;
+  const expanded = expandHome(target);
+  const isRelative = !/^(?:file:\/\/|[A-Za-z]:[\\/]|\\\\|\/)/i.test(expanded);
+  const sendPath = isRelative ? path.resolve(expanded) : expanded;
 
   const params: Record<string, unknown> = { path: sendPath };
   if (line !== undefined) params.line = line;

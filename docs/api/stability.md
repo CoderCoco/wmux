@@ -247,6 +247,7 @@ Reads structured terminal output events (prompt detection, agent status events).
 | `workspace.current` | Returns the active workspace id. |
 | `surface.list` | All wmux windows. |
 | `surface.new` | Opens a new wmux window. |
+| `file.open` | Shows a file in a read-only editor or preview tab. |
 | `surface.focus` | Focuses an existing window. |
 | `surface.close` | Closes a window. |
 | `pane.focus` | Focuses a leaf pane within the active workspace. |

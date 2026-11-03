@@ -21,6 +21,14 @@ export interface OpenTerminalFileLinkDeps {
   openWithOs: (filePath: string) => void;
   /** Raised when nothing could be opened at all (e.g. an unresolvable relative path). */
   onFailure: () => void;
+  /**
+   * The link came from an OSC 8 hyperlink, whose destination the program
+   * controls and the user never saw. It may only open in the in-app viewer:
+   * the OS opener is never reached (a hostile `file:` target must not hand the
+   * OS a path to launch or a UNC share to authenticate against), so every
+   * would-be fallback becomes `onFailure` instead.
+   */
+  viewerOnly?: boolean;
 }
 
 const ABSOLUTE = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
@@ -50,6 +58,8 @@ export async function openTerminalFileLink(
   deps: OpenTerminalFileLinkDeps,
 ): Promise<void> {
   const platform = window.electronAPI.platform;
+  // Every OS-opener fallback below goes through here.
+  const openWithOs = deps.viewerOnly ? () => deps.onFailure() : deps.openWithOs;
   const owner = locatePty(ptyId);
   const inWsl = owner !== null && isWslShell(owner.shell, platform);
   const distro = inWsl && ptyId ? await paneWslDistro(ptyId, window.electronAPI.pty) : undefined;
@@ -64,14 +74,14 @@ export async function openTerminalFileLink(
   if (!link) {
     // Nothing translated. An absolute path keeps the old behaviour (main
     // validates it); a relative one has no meaning to the OS opener.
-    if (ABSOLUTE.test(raw)) deps.openWithOs(raw.replace(/:\d+(?::\d+)?$/, ''));
+    if (ABSOLUTE.test(raw)) openWithOs(raw.replace(/:\d+(?::\d+)?$/, ''));
     else deps.onFailure();
     return;
   }
 
   const state = useStore.getState();
   if (state.terminalOpenFileLinksIn === 'os' || !owner) {
-    deps.openWithOs(link.hostPath);
+    openWithOs(link.hostPath);
     return;
   }
 
@@ -88,7 +98,7 @@ export async function openTerminalFileLink(
   }
   // null: a directory, missing, blocked or over the 1 MB cap. NUL: binary.
   if (content === null || content.includes('\0')) {
-    deps.openWithOs(link.hostPath);
+    openWithOs(link.hostPath);
     return;
   }
   state.addEditorSurface(owner.paneId, link.hostPath, {

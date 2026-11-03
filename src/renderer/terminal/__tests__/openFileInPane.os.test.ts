@@ -1,12 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const storeSetting = vi.hoisted(() => ({ value: 'tab' }));
 const addEditorSurface = vi.fn();
 const addPreviewSurface = vi.fn();
 vi.mock('../../stores', () => ({
-  useStore: { getState: () => ({ addEditorSurface, addPreviewSurface, workspaces: [] }) },
+  useStore: {
+    getState: () => ({
+      addEditorSurface,
+      addPreviewSurface,
+      terminalOpenFileLinksIn: storeSetting.value,
+      workspaces: [
+        {
+          id: 'w',
+          rootPane: { id: 'p', type: 'leaf', surfaces: [{ ptyId: 'pty', shell: 'bash', cwd: '/home/u' }] },
+        },
+      ],
+    }),
+  },
 }));
 
-import { openFileInPane } from '../openTerminalFileLink';
+import { openFileInPane, openTerminalFileLink } from '../openTerminalFileLink';
 
 const readFile = vi.fn();
 const list = vi.fn();
@@ -85,5 +98,44 @@ describe('openFileInPane', () => {
   it('refuses a remote (shadow) workspace', async () => {
     const r = await openFileInPane({ raw: '/tmp/x.md', workspaceId: 'shadow:abc', paneId: 'p' });
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('openTerminalFileLink viewerOnly (OSC 8)', () => {
+  const deps = () => ({ openWithOs: vi.fn(), onFailure: vi.fn(), viewerOnly: true });
+
+  beforeEach(() => {
+    storeSetting.value = 'tab';
+  });
+
+  it('never reaches the OS opener when the viewer cannot read the file', async () => {
+    readFile.mockResolvedValue(null);
+    const d = deps();
+    await openTerminalFileLink('/tmp/x.sh', undefined, 'pty', d);
+    expect(d.openWithOs).not.toHaveBeenCalled();
+    expect(d.onFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it('never reaches the OS opener when the setting prefers the OS', async () => {
+    storeSetting.value = 'os';
+    const d = deps();
+    await openTerminalFileLink('/tmp/x.md', undefined, 'pty', d);
+    expect(d.openWithOs).not.toHaveBeenCalled();
+    expect(d.onFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails instead of opening a UNC target the resolver refuses', async () => {
+    setPlatform('win32');
+    const d = deps();
+    await openTerminalFileLink('file://evil/share/x.md', undefined, 'pty', d);
+    expect(d.openWithOs).not.toHaveBeenCalled();
+    expect(d.onFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it('still uses the OS opener for a plain-text click (no viewerOnly)', async () => {
+    readFile.mockResolvedValue(null);
+    const d = { openWithOs: vi.fn(), onFailure: vi.fn() };
+    await openTerminalFileLink('/tmp/x.sh', undefined, 'pty', d);
+    expect(d.openWithOs).toHaveBeenCalledWith('/tmp/x.sh');
   });
 });

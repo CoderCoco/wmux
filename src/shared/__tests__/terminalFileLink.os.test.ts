@@ -55,9 +55,18 @@ describe('resolveTerminalFileLink', () => {
     it('reads a drive file URL on Windows', () => {
       expect(resolveTerminalFileLink({ ...winNative, raw: 'file:///C:/Users/me/x.md' })).toEqual({ hostPath: 'C:\\Users\\me\\x.md' });
     });
-    it('reads a server file URL as UNC on Windows only', () => {
-      expect(resolveTerminalFileLink({ ...winNative, raw: 'file://srv/share/x.md' })).toEqual({ hostPath: '\\\\srv\\share\\x.md' });
+    it('refuses a non-local host (UNC would leak NTLM credentials)', () => {
+      expect(resolveTerminalFileLink({ ...winNative, raw: 'file://srv/share/x.md' })).toBeNull();
+      expect(resolveTerminalFileLink({ ...winWsl, raw: 'file://srv/share/x.md' })).toBeNull();
       expect(resolveTerminalFileLink({ ...linux, raw: 'file://srv/share/x.md' })).toBeNull();
+      expect(resolveTerminalFileLink({ ...winNative, raw: 'file://wsl.localhost/Ubuntu/tmp/x.md' })).toBeNull();
+    });
+    it('accepts an empty or localhost host', () => {
+      expect(resolveTerminalFileLink({ ...winNative, raw: 'file://localhost/C:/x.md' })).toEqual({ hostPath: 'C:\\x.md' });
+      expect(resolveTerminalFileLink({ ...linux, raw: 'file://LOCALHOST/tmp/x.md' })).toEqual({ hostPath: '/tmp/x.md' });
+    });
+    it('does not turn an empty-host //server/share path into UNC on a native Windows pane', () => {
+      expect(resolveTerminalFileLink({ ...winNative, raw: 'file:////srv/share/x.md' })).toBeNull();
     });
     it('translates a file URL in a WSL pane and honours #L', () => {
       expect(resolveTerminalFileLink({ ...winWsl, raw: 'file:///tmp/x.md#L12' })).toEqual({ hostPath: '\\\\wsl$\\Ubuntu\\tmp\\x.md', line: 12 });

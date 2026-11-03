@@ -8,7 +8,7 @@
  *  - drive / UNC path on a Windows host: passed through, normalised;
  *  - POSIX absolute path in a WSL pane on a Windows host: translated with
  *    `wslPathToHost` (`/mnt/c/x` -> `C:\x`, else `\\wsl$\<distro>\...`);
- *  - `file://` URLs (including `file:///C:/x` and `file://server/share/x`);
+ *  - `file://` URLs (including `file:///C:/x`; a non-local host is refused);
  *  - `:line` / `:line:col` suffixes (and a `#L12` URL fragment);
  *  - relative paths, joined onto the pane's cwd.
  * Anything else (a POSIX path in a native Windows pane, `~`, a relative path
@@ -76,7 +76,7 @@ function joinSegments(base: string[], rel: string): string[] | null {
   return out;
 }
 
-function fromFileUrl(raw: string, hostPlatform: NodeJS.Platform): { path: string; line?: number } | null {
+function fromFileUrl(raw: string): { path: string; line?: number } | null {
   let url: URL;
   try {
     url = new URL(raw);
@@ -93,11 +93,10 @@ function fromFileUrl(raw: string, hostPlatform: NodeJS.Platform): { path: string
   const frag = /^#L(\d+)/i.exec(url.hash);
   const line = frag ? Number(frag[1]) : undefined;
   const host = url.hostname;
-  if (host !== '' && host.toLowerCase() !== 'localhost') {
-    // file://server/share/x -> \\server\share\x (Windows hosts only).
-    if (hostPlatform !== 'win32') return null;
-    return { path: `\\\\${host}${pathname.replace(/\//g, '\\')}`, line };
-  }
+  // A remote host would turn into a UNC path (\\host\share), and opening one
+  // makes Windows authenticate to that host (NTLM leak). Only local file URLs
+  // are accepted; WSL shares are reached through plain POSIX paths instead.
+  if (host !== '' && host.toLowerCase() !== 'localhost') return null;
   // file:///C:/x -> C:/x
   if (/^\/[A-Za-z]:[\\/]/.test(pathname)) return { path: pathname.slice(1), line };
   return { path: pathname, line };
@@ -113,7 +112,7 @@ export function resolveTerminalFileLink(input: TerminalFileLinkInput): TerminalF
   let col: number | undefined;
 
   if (/^file:/i.test(text)) {
-    const parsed = fromFileUrl(text, hostPlatform);
+    const parsed = fromFileUrl(text);
     if (!parsed) return null;
     text = parsed.path;
     line = parsed.line;
