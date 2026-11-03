@@ -54,6 +54,8 @@ export interface Surface {
   editorFilePath?: string;
   /** `editor` surfaces only: 1-based line to scroll to when the tab was opened from `path:line`. */
   editorLine?: number;
+  /** `editor` surfaces only: bumped each time a link re-targets the open tab, so the same line can be re-shown. */
+  editorLineSeq?: number;
   /** `preview` surfaces only (#2150): the image or PDF the tab shows. */
   previewFilePath?: string;
   /**

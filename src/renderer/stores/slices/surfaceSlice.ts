@@ -236,7 +236,12 @@ export const createSurfaceSlice: StateCreator<StoreState, [['zustand/immer', nev
       && s.editorFilePath !== undefined && normalizeHostPath(s.editorFilePath) === filePath);
     if (existing) {
       pane.activeSurfaceId = existing.id;
-      if (line !== undefined) existing.editorLine = line;
+      if (line !== undefined) {
+        existing.editorLine = line;
+        // Bumped on every request so a repeat click on the same line still
+        // re-scrolls and re-marks it after the user scrolled away or cleared it.
+        existing.editorLineSeq = (existing.editorLineSeq ?? 0) + 1;
+      }
       return;
     }
     const fileName = filePath.split(/[/\\]/).pop() || filePath;

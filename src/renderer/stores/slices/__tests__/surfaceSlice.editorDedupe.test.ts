@@ -56,6 +56,17 @@ describe('surfaceSlice.addEditorSurface', () => {
     expect(leaf(active).surfaces[1].editorLine).toBeUndefined();
   });
 
+  it('bumps editorLineSeq on every re-target, even to the same line', () => {
+    const { slice, leaf, active } = harness();
+    const paneId = leaf(active).id;
+    slice.addEditorSurface(paneId, '/tmp/a.md', { line: 5 });
+    expect(leaf(active).surfaces[0].editorLineSeq).toBeUndefined();
+    slice.addEditorSurface(paneId, '/tmp/a.md', { line: 5 });
+    expect(leaf(active).surfaces[0].editorLineSeq).toBe(1);
+    slice.addEditorSurface(paneId, '/tmp/a.md');
+    expect(leaf(active).surfaces[0].editorLineSeq).toBe(1);
+  });
+
   it('opens in the named workspace, not the active one', () => {
     const { slice, leaf, active, other } = harness();
     slice.addEditorSurface(leaf(other).id, '/tmp/a.md', { workspaceId: other.id });
