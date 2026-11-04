@@ -11,6 +11,7 @@ import { useStore } from '../stores';
 import { getLeafPanes } from '../../shared/paneUtils';
 import { isPreviewablePath } from '../../shared/filePreview';
 import { isWslShell } from '../../shared/wslTarget';
+import { isShadowWorkspaceId } from '../../shared/pcRail';
 import { resolveTerminalFileLink } from '../../shared/terminalFileLink';
 import { paneWslDistro } from './paneForegroundProbe';
 import type { PathLocation } from './pathLinkProvider';
@@ -106,4 +107,77 @@ export async function openTerminalFileLink(
     // separately, so `location` carries it for plain path clicks.
     ...((link.line ?? location?.line) !== undefined && { line: (link.line ?? location?.line) as number }),
   });
+}
+
+export interface OpenFileInPaneInput {
+  /** The path as the caller wrote it (POSIX path from a WSL agent, drive path, `file://`, relative). */
+  raw: string;
+  /** Explicit line; wins over a `:line` suffix in `raw`. */
+  line?: number;
+  workspaceId: string;
+  paneId: string;
+  /** The caller's terminal surface in that pane, when there is one: drives WSL translation and relative paths. */
+  terminal?: { ptyId: string; shell: string; cwd: string };
+}
+
+export type OpenFileInPaneResult =
+  | { ok: true; hostPath: string; surfaceType: 'editor' | 'preview' }
+  | { ok: false; error: string };
+
+/**
+ * Open a file in an editor or preview tab of a given pane (the `file.open` RPC).
+ * Unlike a terminal click this never falls back to the OS opener and ignores the
+ * `terminalOpenFileLinksIn` setting: an agent asked for a tab, so a file the
+ * viewer cannot read (directory, missing, binary, over 1 MB, fs-blocklisted) is
+ * an error the caller can act on.
+ */
+export async function openFileInPane(input: OpenFileInPaneInput): Promise<OpenFileInPaneResult> {
+  const platform = window.electronAPI.platform;
+  const { terminal } = input;
+  const inWsl = terminal !== undefined && isWslShell(terminal.shell, platform);
+  const distro = inWsl && terminal ? await paneWslDistro(terminal.ptyId, window.electronAPI.pty) : undefined;
+  const link = resolveTerminalFileLink({
+    raw: input.raw,
+    hostPlatform: platform,
+    shellKind: inWsl ? 'wsl' : 'native',
+    distro,
+    cwd: terminal?.cwd || undefined,
+  });
+  if (!link) {
+    return {
+      ok: false,
+      error: `file.open: cannot resolve "${input.raw}" to a path on this machine (use an absolute path, or a relative one from a terminal pane with a known cwd)`,
+    };
+  }
+  if (isShadowWorkspaceId(input.workspaceId)) {
+    return { ok: false, error: 'file.open: a local file cannot be opened in a remote computer\'s workspace' };
+  }
+  const state = useStore.getState();
+  const line = input.line !== undefined && input.line > 0 ? input.line : link.line;
+
+  if (isPreviewablePath(link.hostPath)) {
+    state.addPreviewSurface(input.paneId, link.hostPath, { workspaceId: input.workspaceId });
+    return { ok: true, hostPath: link.hostPath, surfaceType: 'preview' };
+  }
+
+  let content: string | null = null;
+  try {
+    content = await window.electronAPI.fs.readFile(link.hostPath);
+  } catch {
+    content = null;
+  }
+  if (content === null) {
+    return {
+      ok: false,
+      error: `file.open: ${link.hostPath} cannot be opened in the viewer (missing, a directory, larger than 1 MB, or not readable by wmux)`,
+    };
+  }
+  if (content.includes('\0')) {
+    return { ok: false, error: `file.open: ${link.hostPath} looks like a binary file and cannot be shown in the viewer` };
+  }
+  state.addEditorSurface(input.paneId, link.hostPath, {
+    workspaceId: input.workspaceId,
+    ...(line !== undefined && { line }),
+  });
+  return { ok: true, hostPath: link.hostPath, surfaceType: 'editor' };
 }

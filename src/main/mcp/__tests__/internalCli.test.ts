@@ -109,6 +109,7 @@ describe('WMUX_CLI_METHODS source invariant', () => {
       'workspace.close',
       'surface.list',
       'surface.new',
+      'file.open',
       'surface.focus',
       'surface.close',
       'notify',

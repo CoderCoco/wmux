@@ -92,6 +92,7 @@ describe('paneLifecycle tools: registration', () => {
       'surface_close',
       'pane_stash',
       'pane_unstash',
+      'file_open',
     ];
     const commanderNames = [...collectTools('commander').keys()];
 
@@ -206,6 +207,35 @@ describe('surface_new (CREATE family)', () => {
       shell: 'pwsh',
       cwd: 'C:/tmp',
     });
+  });
+});
+
+describe('file_open', () => {
+  const fileOpen = tools.get('file_open')!;
+
+  it('defaults to the caller workspace and forwards path + line', async () => {
+    callerWs = 'ws-caller';
+    await fileOpen({ path: '/tmp/x.md', line: 3 });
+    expect(mockCallRpc).toHaveBeenCalledWith('file.open', {
+      path: '/tmp/x.md', line: 3, workspaceId: 'ws-caller',
+    });
+  });
+
+  it('an explicit paneId wins and skips workspace resolution', async () => {
+    await fileOpen({ path: '/tmp/x.md', paneId: 'p1', workspaceId: 'ws-x' });
+    expect(mockCallRpc).toHaveBeenCalledWith('file.open', { path: '/tmp/x.md', paneId: 'p1' });
+    expect(mockResolveWs).not.toHaveBeenCalled();
+  });
+
+  it('omits workspaceId on a true identity miss', async () => {
+    callerWs = '';
+    await fileOpen({ path: '/tmp/x.md' });
+    expect(mockCallRpc).toHaveBeenCalledWith('file.open', { path: '/tmp/x.md' });
+  });
+
+  it('is full-profile only (not core, not commander)', () => {
+    expect(collectTools('core').has('file_open')).toBe(false);
+    expect(collectTools('commander').has('file_open')).toBe(false);
   });
 });
 

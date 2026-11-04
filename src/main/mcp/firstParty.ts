@@ -172,6 +172,10 @@ export const FIRST_PARTY_METHODS: ReadonlySet<RpcMethod> = new Set<RpcMethod>([
   // closed it).
   'surface.new',
   'surface.close',
+  // file_open — shows a file in a viewer tab (read-only; the renderer reads it
+  // through the fs blocklist). Reserved wmux.internal, so also in
+  // ALLOWED_RESERVED_FIRST_PARTY.
+  'file.open',
   // panes + metadata
   'pane.list',
   // pane-name targeting (#w1-2) on the terminal, pane and A2A tools

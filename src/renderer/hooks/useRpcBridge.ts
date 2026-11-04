@@ -127,6 +127,7 @@ export function surfaceNewInitialCommand(raw: unknown): string | undefined | nul
 }
 import { workspaceCloseRefusal } from '../components/Moa/moaHqGuard';
 import { reserveLeaf } from '../utils/reservedLeaves';
+import { openFileInPane } from '../terminal/openTerminalFileLink';
 
 // ---------------------------------------------------------------------------
 // Cold-park (TASK-9) daemon-backed read fallback
@@ -2157,6 +2158,55 @@ export async function handleRpcMethod(method: string, params: RpcParams): Promis
     return surface
       ? { id: surface.id, ptyId: surface.ptyId, title: surface.title, shell: surface.shell, cwd: surface.cwd }
       : { ptyId };
+  }
+
+  if (method === 'file.open') {
+    // Pane choice: explicit paneId (globally unique) > the pane holding the
+    // caller's ptyId > the workspace's active pane. An explicit-but-unknown
+    // workspace/pane fails closed, as surface.new does.
+    const path = typeof params.path === 'string' ? params.path.trim() : '';
+    if (!path) return { error: 'file.open: missing required param "path"' };
+    const wantWs = typeof params.workspaceId === 'string' && params.workspaceId.length > 0 ? params.workspaceId : undefined;
+    const wantPane = typeof params.paneId === 'string' && params.paneId.length > 0 ? params.paneId : undefined;
+    const wantPty = typeof params.ptyId === 'string' && params.ptyId.length > 0 ? params.ptyId : undefined;
+    if (wantWs && !store.workspaces.some((w) => w.id === wantWs)) {
+      return { error: `file.open: workspace "${wantWs}" not found` };
+    }
+    let target: { wsId: string; pane: PaneLeaf } | null = null;
+    for (const w of store.workspaces) {
+      if (wantWs && w.id !== wantWs) continue;
+      for (const p of getLeafPanes(w.rootPane)) {
+        const hit = wantPane
+          ? p.id === wantPane
+          : wantPty
+            ? p.surfaces.some((s) => s.ptyId === wantPty)
+            : false;
+        if (hit) { target = { wsId: w.id, pane: p }; break; }
+      }
+      if (target) break;
+    }
+    if (!target && !wantPane) {
+      const ws = store.workspaces.find((w) => w.id === (wantWs ?? store.activeWorkspaceId));
+      const pane = ws ? findPaneById(ws.rootPane, ws.activePaneId) : null;
+      if (ws && pane && pane.type === 'leaf') target = { wsId: ws.id, pane };
+    }
+    if (!target) {
+      return { error: wantPane ? `file.open: pane "${wantPane}" not found` : 'file.open: no pane to open the file in' };
+    }
+    // The caller's terminal in that pane drives WSL translation and relative paths.
+    const term = target.pane.surfaces.find((s) => wantPty && s.ptyId === wantPty)
+      ?? target.pane.surfaces.find((s) => s.id === target.pane.activeSurfaceId && s.ptyId)
+      ?? target.pane.surfaces.find((s) => s.ptyId);
+    const opened = await openFileInPane({
+      raw: path,
+      ...(typeof params.line === 'number' && { line: params.line }),
+      workspaceId: target.wsId,
+      paneId: target.pane.id,
+      ...(term && { terminal: { ptyId: term.ptyId, shell: term.shell, cwd: term.cwd } }),
+    });
+    return opened.ok
+      ? { ok: true, path: opened.hostPath, surfaceType: opened.surfaceType, paneId: target.pane.id, workspaceId: target.wsId }
+      : { error: opened.error };
   }
 
   if (method === 'surface.focus') {

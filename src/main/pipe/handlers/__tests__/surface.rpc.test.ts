@@ -60,6 +60,40 @@ describe('surface.rpc — new (workspaceId scoping)', () => {
   });
 });
 
+describe('surface.rpc — file.open', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sendToRendererMock.mockResolvedValue({ ok: true });
+  });
+
+  it('forwards path, line and the pane/workspace/pty locators only', async () => {
+    const router = register();
+    const r = await router.dispatch({
+      id: '1',
+      method: 'file.open',
+      params: { path: '/tmp/x.md', line: 7, workspaceId: 'ws-2', paneId: 'p1', ptyId: 'pty-1', junk: 1 },
+    });
+    expect(r.ok).toBe(true);
+    expect(sendToRendererMock).toHaveBeenCalledWith(expect.any(Function), 'file.open', {
+      path: '/tmp/x.md', line: 7, workspaceId: 'ws-2', paneId: 'p1', ptyId: 'pty-1',
+    });
+  });
+
+  it.each([
+    ['missing path', {}],
+    ['blank path', { path: '  ' }],
+    ['non-integer line', { path: '/x', line: 1.5 }],
+    ['zero line', { path: '/x', line: 0 }],
+    ['non-string paneId', { path: '/x', paneId: 5 }],
+    ['non-string workspaceId', { path: '/x', workspaceId: 5 }],
+  ])('rejects %s without reaching the renderer', async (_label, params) => {
+    const router = register();
+    const r = await router.dispatch({ id: '2', method: 'file.open', params });
+    expect(r.ok).toBe(false);
+    expect(sendToRendererMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('surface.rpc — focus/close forward the surface id', () => {
   beforeEach(() => {
     vi.clearAllMocks();

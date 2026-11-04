@@ -100,6 +100,20 @@ const SURFACE_NEW_SHAPE = {
   cwd: z.string().optional().describe('Working directory. Omit for the workspace default.'),
 };
 
+const FILE_OPEN_SHAPE = {
+  path: z
+    .string()
+    .describe('Path or file:// URL'),
+  line: z.number().int().positive().optional().describe('1-based'),
+  paneId: z
+    .string()
+    .optional()
+    .describe('Pane id or #name'),
+  workspaceId: z
+    .string()
+    .optional(),
+};
+
 const SURFACE_CLOSE_SHAPE = {
   surfaceId: z.string().describe('Surface id to close (from surface_list).'),
 };
@@ -214,6 +228,25 @@ export function createPaneLifecycleToolCatalog(
       inputSchema: PANE_UNSTASH_SHAPE,
       profiles: ['full', 'core', 'commander'],
       invoke: async ({ paneId }) => callRpc('pane.unstash', { id: await paneRef(paneId) }),
+    }),
+
+    // ── file_open (CREATE family) ───────────────────────────────────
+    defineWmuxTool({
+      name: 'file_open',
+      description:
+        'Open a file in a read-only tab. WSL paths are translated. Fails if missing, binary, >1 MB, or blocked.',
+      inputSchema: FILE_OPEN_SHAPE,
+      profiles: ['full'],
+      invoke: async ({ path, line, paneId, workspaceId }) => {
+        const params: Record<string, unknown> = { path };
+        if (line !== undefined) params['line'] = line;
+        if (paneId) params['paneId'] = await paneRef(paneId);
+        else {
+          const resolved = workspaceId || (await resolveCallerWorkspaceId());
+          if (resolved) params['workspaceId'] = resolved;
+        }
+        return callRpc('file.open', params);
+      },
     }),
   ]);
 }
